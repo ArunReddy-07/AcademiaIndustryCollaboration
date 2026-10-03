@@ -28,11 +28,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(AuthController.class)
 @Import({SecurityConfig.class, AuthSecurityWebMvcTest.JwtFilterConfiguration.class})
 @TestPropertySource(properties = {
-        "app.security.allowed-origins=http://localhost:5173, https://portal.example.com"
+        "app.security.allowed-origins=http://localhost:5173"
 })
 class AuthSecurityWebMvcTest {
 
-    private static final String FRONTEND_ORIGIN = "https://portal.example.com";
+    private static final String FRONTEND_ORIGIN = "https://academiaindustryfrontend.onrender.com";
 
     @Autowired
     private MockMvc mockMvc;
