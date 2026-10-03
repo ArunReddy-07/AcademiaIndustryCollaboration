@@ -53,3 +53,7 @@ The Compose stack:
 - Publishes the React frontend served by Nginx on port `80` by default.
 
 For internet-facing production use, terminate TLS at a managed ingress/reverse proxy, configure its trusted forwarded headers and exact allowed origins, and use managed secret storage and database backups. The Docker profile currently uses Hibernate `ddl-auto=update`; introduce and validate versioned database migrations before storing production data. Review student-directory visibility and obtain the required privacy/consent policy before loading real student records.
+
+### Render deployment
+
+For the current Render services, the frontend production build uses `https://academiaindustrycollaboration-1.onrender.com/api` as its API base. In the backend Render service, set `ALLOWED_ORIGINS` to `https://academiaindustryfrontend.onrender.com` (origin only, with no path or trailing slash). If a `VITE_API_BASE_URL` variable is set on the Render Static Site, set it to the backend API base above; Vite embeds it at build time, so redeploy the frontend after changing it. Redeploy the backend after changing its environment variables.
