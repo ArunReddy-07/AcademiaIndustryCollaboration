@@ -1,0 +1,5 @@
+-- Development seed data is loaded by the Spring profile in:
+-- backend/src/main/resources/data-dev.sql
+--
+-- Activate it with SPRING_PROFILES_ACTIVE=dev. The seed contains reference
+-- skills only and never creates users, passwords, JWT secrets, or credentials.

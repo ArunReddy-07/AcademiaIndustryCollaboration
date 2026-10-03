@@ -1,0 +1,11 @@
+-- This project does not use Flyway or Liquibase.
+-- PostgreSQL development schemas are created and evolved by Hibernate using
+-- spring.jpa.hibernate.ddl-auto=update. Keep this file as the schema contract
+-- reference; do not execute destructive replacement scripts against a shared DB.
+--
+-- Entity tables include users, institutions, student_profiles, skills,
+-- internships, jobs, opportunities, opportunity_skill_requirements,
+-- career_listing_skill_requirements (exactly one internship/job parent),
+-- student_skills, skill_assessments, applications, collaborations, and placements.
+-- institutions.account_user_id links an INSTITUTION user to its institution.
+-- Foreign keys, check constraints, and unique constraints are declared by JPA.
