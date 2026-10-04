@@ -3,6 +3,7 @@ package com.academiaindustry.repository;
 import com.academiaindustry.entity.Application;
 import com.academiaindustry.entity.ApplicationStatus;
 import com.academiaindustry.entity.OpportunityType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -16,6 +17,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     boolean existsByStudentIdAndOpportunityTypeAndOpportunityId(
             Long studentId, OpportunityType opportunityType, Long opportunityId);
 
+    @EntityGraph(attributePaths = "sharedPortfolioItems")
     List<Application> findByOpportunityTypeAndOpportunityId(
             OpportunityType opportunityType, Long opportunityId);
 
