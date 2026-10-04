@@ -101,23 +101,51 @@ function PublicNav() { return <nav className="public-nav"><Link className="brand
 
 function AuthPage({ mode, onAuth }) {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'STUDENT' });
+  const [form, setForm] = useState({
+    name: '', email: '', password: '', role: 'STUDENT', code: '', newPassword: '',
+  });
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
+  const [resetStep, setResetStep] = useState('');
   const register = mode === 'register';
   const submit = async (event) => {
-    event.preventDefault(); setError(''); setBusy(true);
-    try { const response = await (register ? authApi.register(form) : authApi.login({ email: form.email, password: form.password })); onAuth(response.data); navigate('/app'); }
+    event.preventDefault(); setError(''); setSuccess(''); setBusy(true);
+    try {
+      if (resetStep === 'request') {
+        const response = await authApi.requestPasswordReset({ email: form.email });
+        setSuccess(response.data.message);
+        setResetStep('complete');
+      } else if (resetStep === 'complete') {
+        const response = await authApi.completePasswordReset({
+          email: form.email, code: form.code, newPassword: form.newPassword,
+        });
+        setSuccess(response.data.message);
+        setResetStep('');
+        setForm((current) => ({ ...current, password: '', code: '', newPassword: '' }));
+      } else {
+        const response = await (register
+          ? authApi.register(form)
+          : authApi.login({ email: form.email, password: form.password }));
+        onAuth(response.data);
+        navigate('/app');
+      }
+    }
     catch (err) { setError(err.response?.data?.message || 'We could not complete that request. Check the API is running and try again.'); }
     finally { setBusy(false); }
   };
-  return <div className="auth-page"><PublicNav /><div className="auth-panel"><p className="eyebrow">{register ? 'JOIN THE NETWORK' : 'WELCOME BACK'}</p><h1>{register ? 'Start with your next step.' : 'Good to see you.'}</h1><p className="muted">{register ? 'Your role shapes the workspace you see.' : 'Sign in to continue your work.'}</p><form onSubmit={submit} className="form-stack">
+  const resetMode = Boolean(resetStep);
+  return <div className="auth-page"><PublicNav /><div className="auth-panel"><p className="eyebrow">{register ? 'JOIN THE NETWORK' : resetMode ? 'ACCOUNT RECOVERY' : 'WELCOME BACK'}</p><h1>{register ? 'Start with your next step.' : resetMode ? 'Reset your password.' : 'Good to see you.'}</h1><p className="muted">{register ? 'Your role shapes the workspace you see.' : resetStep === 'request' ? 'We’ll email a one-time verification code if an account matches.' : resetStep === 'complete' ? 'Enter the six-digit code from your email and choose a new password.' : 'Sign in to continue your work.'}</p><form onSubmit={submit} className="form-stack">
     {register && <Field label="Name"><input required maxLength="150" value={form.name} onChange={update(setForm, 'name')} /></Field>}
-    <Field label="Email"><input required type="email" value={form.email} onChange={update(setForm, 'email')} /></Field>
-    <Field label="Password"><input required minLength="8" type="password" value={form.password} onChange={update(setForm, 'password')} /></Field>
+    <Field label="Email"><input required type="email" maxLength="320" value={form.email} onChange={update(setForm, 'email')} disabled={resetStep === 'complete'} /></Field>
+    {!register && !resetMode && <Field label="Password"><input required minLength="8" maxLength="255" type="password" value={form.password} onChange={update(setForm, 'password')} /></Field>}
+    {resetStep === 'complete' && <>
+      <Field label="Verification code"><input required inputMode="numeric" pattern="[0-9]{6}" maxLength="6" value={form.code} onChange={update(setForm, 'code')} /></Field>
+      <Field label="New password"><input required minLength="8" maxLength="255" type="password" value={form.newPassword} onChange={update(setForm, 'newPassword')} /></Field>
+    </>}
     {register && <Field label="Role"><select value={form.role} onChange={update(setForm, 'role')}><option value="STUDENT">Student</option><option value="INDUSTRY">Industry</option><option value="INSTITUTION">Institution</option></select></Field>}
-    {error && <p className="form-error">{error}</p>}<button className="button primary full" disabled={busy}>{busy ? 'Working…' : register ? 'Create account' : 'Sign in'}</button>
-  </form><p className="switch-auth">{register ? 'Already registered?' : 'New to the portal?'} <Link to={register ? '/login' : '/register'}>{register ? 'Sign in' : 'Create an account'}</Link></p></div></div>;
+    {error && <p className="form-error">{error}</p>}{success && <p className="muted" role="status">{success}</p>}<button className="button primary full" disabled={busy}>{busy ? 'Working…' : register ? 'Create account' : resetStep === 'request' ? 'Send verification code' : resetStep === 'complete' ? 'Reset password' : 'Sign in'}</button>
+  </form>{!register && !resetMode && <p className="switch-auth"><button type="button" className="text-link link-button" onClick={() => { setError(''); setSuccess(''); setResetStep('request'); }}>Forgot password?</button></p>}{resetMode ? <p className="switch-auth"><button type="button" className="text-link link-button" onClick={() => { setError(''); setSuccess(''); setResetStep(''); }}>Back to sign in</button></p> : <p className="switch-auth">{register ? 'Already registered?' : 'New to the portal?'} <Link to={register ? '/login' : '/register'}>{register ? 'Sign in' : 'Create an account'}</Link></p>}</div></div>;
 }
 function update(setter, key) { return (event) => setter((current) => ({ ...current, [key]: event.target.value })); }
 function Field({ label, children }) { return <label className="field"><span>{label}</span>{children}</label>; }
@@ -517,8 +545,57 @@ function SkillGaps() {
   </Page>;
 }
 
-function Opportunities({ role }) { const [items, setItems] = useState([]); const [loading, setLoading] = useState(true); useEffect(() => { portalApi.opportunities().then((r) => setItems(r.data)).catch(() => {}).finally(() => setLoading(false)); }, []); return <Page eyebrow="OPPORTUNITIES" title="Work worth stepping into." description="Browse projects, programs, internships, and roles across the network." actions={role === 'INDUSTRY' || role === 'ADMIN' ? <Link className="button primary" to="/app/opportunities/new">New opportunity</Link> : null}><div className="opportunity-grid">{loading ? <Loading /> : items.length ? items.map((item) => <OpportunityCard key={item.id} item={item} />) : <Empty text="No opportunities are available yet." />}</div></Page>; }
-function OpportunityCard({ item }) { return <Link className="opportunity-card" to={`/app/opportunities/${item.id}`}><div className="card-top"><span className="pill">{item.type || 'OPPORTUNITY'}</span><span>{item.status}</span></div><h2>{item.title}</h2><p>{item.description}</p><footer><span>{item.companyName || item.industrySector || 'Industry partner'} · {item.location}</span><b>View details →</b></footer></Link>; }
+function Opportunities({ role }) {
+  const { session } = useSession();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    portalApi.opportunities()
+      .then((response) => setItems(response.data))
+      .catch((requestError) => setError(requestError.response?.data?.message || 'Opportunities could not be loaded.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const remove = async (item) => {
+    if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
+    setDeletingId(item.id);
+    setError('');
+    try {
+      await portalApi.deleteOpportunity(item.id);
+      setItems((current) => current.filter((opportunity) => opportunity.id !== item.id));
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'The opportunity could not be deleted. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return <Page eyebrow="OPPORTUNITIES" title="Work worth stepping into." description="Browse projects, programs, internships, and roles across the network." actions={role === 'INDUSTRY' || role === 'ADMIN' ? <Link className="button primary" to="/app/opportunities/new">New opportunity</Link> : null}>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <div className="opportunity-grid">{loading ? <Loading /> : items.length ? items.map((item) => (
+      <OpportunityCard
+        key={item.id}
+        item={item}
+        canDelete={role === 'INDUSTRY' && String(session?.user?.id) === String(item.industryId)}
+        deleting={deletingId === item.id}
+        onDelete={() => remove(item)}
+      />
+    )) : <Empty text="No opportunities are available yet." />}</div>
+  </Page>;
+}
+
+function OpportunityCard({ item, canDelete, deleting, onDelete }) {
+  return <article className="opportunity-card">
+    <div className="card-top"><span className="pill">{item.type || 'OPPORTUNITY'}</span><span>{item.status}</span></div>
+    <h2>{item.title}</h2>
+    <p>{item.description}</p>
+    <footer><span>{item.companyName || item.industrySector || 'Industry partner'} · {item.location}</span><Link to={`/app/opportunities/${item.id}`}>View details →</Link></footer>
+    {canDelete && <button type="button" className="text-link opportunity-delete" disabled={deleting} onClick={onDelete}>{deleting ? 'Deleting…' : 'Delete opportunity'}</button>}
+  </article>;
+}
 function OpportunityDetails() {
   const { id } = useParams();
   const [item, setItem] = useState(null);

@@ -33,6 +33,8 @@ api.interceptors.response.use(
 export const authApi = {
   login: (payload) => api.post('/auth/login', payload),
   register: (payload) => api.post('/auth/register', payload),
+  requestPasswordReset: (payload) => api.post('/auth/password-reset/request', payload),
+  completePasswordReset: (payload) => api.post('/auth/password-reset/complete', payload),
 };
 
 export const portalApi = {
@@ -84,6 +86,7 @@ export const portalApi = {
   createJob: (payload) => api.post('/jobs', payload),
   createOpportunity: (payload) => api.post('/opportunities', payload),
   updateOpportunity: (id, payload) => api.put(`/opportunities/${id}`, payload),
+  deleteOpportunity: (id) => api.delete(`/opportunities/${id}`),
   opportunitySkills: (id) => api.get(`/opportunities/${id}/skills`),
   addOpportunitySkill: (id, payload) => api.post(`/opportunities/${id}/skills`, payload),
   careerListingSkills: (type, listingId) => api.get(`/career-listings/${type}/${listingId}/skills`),

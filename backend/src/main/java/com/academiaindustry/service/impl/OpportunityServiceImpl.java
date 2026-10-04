@@ -7,6 +7,7 @@ import com.academiaindustry.entity.OpportunityType;
 import com.academiaindustry.entity.User;
 import com.academiaindustry.exception.ResourceNotFoundException;
 import com.academiaindustry.repository.OpportunityRepository;
+import com.academiaindustry.repository.OpportunitySkillRequirementRepository;
 import com.academiaindustry.repository.UserRepository;
 import com.academiaindustry.service.OpportunityService;
 import org.springframework.stereotype.Service;
@@ -19,10 +20,14 @@ import java.util.List;
 public class OpportunityServiceImpl implements OpportunityService {
 
     private final OpportunityRepository opportunityRepository;
+    private final OpportunitySkillRequirementRepository skillRequirementRepository;
     private final UserRepository userRepository;
 
-    public OpportunityServiceImpl(OpportunityRepository opportunityRepository, UserRepository userRepository) {
+    public OpportunityServiceImpl(OpportunityRepository opportunityRepository,
+                                  OpportunitySkillRequirementRepository skillRequirementRepository,
+                                  UserRepository userRepository) {
         this.opportunityRepository = opportunityRepository;
+        this.skillRequirementRepository = skillRequirementRepository;
         this.userRepository = userRepository;
     }
 
@@ -66,7 +71,9 @@ public class OpportunityServiceImpl implements OpportunityService {
 
     @Override
     public void delete(Long id) {
-        opportunityRepository.delete(findOpportunity(id));
+        Opportunity opportunity = findOpportunity(id);
+        skillRequirementRepository.deleteByOpportunity_Id(id);
+        opportunityRepository.delete(opportunity);
     }
 
     private Opportunity findOpportunity(Long id) {

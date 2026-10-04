@@ -5,6 +5,7 @@ import com.academiaindustry.dto.AuthResponse;
 import com.academiaindustry.security.JwtAuthenticationFilter;
 import com.academiaindustry.security.JwtService;
 import com.academiaindustry.service.AuthService;
+import com.academiaindustry.service.PasswordResetService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -41,6 +42,9 @@ class AuthSecurityWebMvcTest {
     private AuthService authService;
 
     @MockitoBean
+    private PasswordResetService passwordResetService;
+
+    @MockitoBean
     private JwtService jwtService;
 
     @MockitoBean
@@ -71,6 +75,29 @@ class AuthSecurityWebMvcTest {
                                 """))
                 .andExpect(status().isCreated());
         verify(authService).register(any());
+    }
+
+    @Test
+    void passwordResetRequestEndpointIsPublic() throws Exception {
+        mockMvc.perform(post("/api/auth/password-reset/request")
+                        .contentType("application/json")
+                        .content("""
+                                {"email":"student@example.com"}
+                                """))
+                .andExpect(status().isAccepted());
+        verify(passwordResetService).requestCode("student@example.com");
+    }
+
+    @Test
+    void passwordResetCompletionEndpointIsPublic() throws Exception {
+        mockMvc.perform(post("/api/auth/password-reset/complete")
+                        .contentType("application/json")
+                        .content("""
+                                {"email":"student@example.com","code":"123456",
+                                 "newPassword":"new-password-123"}
+                                """))
+                .andExpect(status().isOk());
+        verify(passwordResetService).completeReset(any());
     }
 
     @Test

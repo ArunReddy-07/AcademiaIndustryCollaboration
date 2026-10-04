@@ -33,6 +33,10 @@ The development profile can create the first Admin account only when `BOOTSTRAP_
 
 The Vite dev server uses the backend at `http://localhost:8081` by default; configure another target in `frontend/vite.config.js` only if your backend runs on a different port. This avoids the local Oracle listener on port 8080.
 
+### Password recovery email
+
+The login page supports email verification codes for password recovery. Configure the backend's `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, and `MAIL_FROM` environment variables with an SMTP account before using this feature. SMTP authentication and STARTTLS default to enabled and can be controlled with `MAIL_SMTP_AUTH` and `MAIL_SMTP_STARTTLS`. For Gmail, use an app password rather than your regular account password. Keep SMTP credentials in environment/secret settings, never in source control. Recovery codes expire after 10 minutes, can be resent after 60 seconds, and allow at most five verification attempts.
+
 ## Deployment-ready setup
 
 This project includes a containerized setup for local evaluation and as a starting point for deployment.

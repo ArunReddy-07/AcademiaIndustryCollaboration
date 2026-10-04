@@ -9,5 +9,7 @@ public interface OpportunitySkillRequirementRepository extends JpaRepository<Opp
 
     List<OpportunitySkillRequirement> findByOpportunityId(Long opportunityId);
 
+    void deleteByOpportunity_Id(Long opportunityId);
+
     boolean existsByOpportunityIdAndSkillId(Long opportunityId, Long skillId);
 }

@@ -24,6 +24,21 @@ public class GlobalExceptionHandler {
 
         private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+        @ExceptionHandler(InvalidPasswordResetException.class)
+        public ResponseEntity<ApiErrorResponse> handleInvalidPasswordReset(
+                        InvalidPasswordResetException exception, HttpServletRequest request) {
+                return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), request.getRequestURI());
+        }
+
+        @ExceptionHandler(PasswordResetEmailException.class)
+        public ResponseEntity<ApiErrorResponse> handlePasswordResetEmail(
+                        PasswordResetEmailException exception, HttpServletRequest request) {
+                logger.error("Password reset email delivery failed for request {}", request.getRequestURI(), exception);
+                return buildResponse(HttpStatus.SERVICE_UNAVAILABLE,
+                                "Password reset email could not be sent. Please try again later.",
+                                request.getRequestURI());
+        }
+
         @ExceptionHandler(AccessDeniedException.class)
         public ResponseEntity<ApiErrorResponse> handleAccessDenied(
                         AccessDeniedException exception, HttpServletRequest request) {
