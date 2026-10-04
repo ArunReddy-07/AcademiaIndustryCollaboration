@@ -75,3 +75,47 @@ h1 em { color: var(--coral); font-style: normal; }
 .shared-evidence-list { margin: 0; padding-left: 18px; min-width: 220px; }
 .shared-evidence-list li { margin: 5px 0; font-size: .78rem; }
 .shared-evidence-list li span { color: var(--muted); }
+.skill-gap-results { margin-top: 28px; }
+.skill-match-summary { display: grid; grid-template-columns: 170px 1fr; gap: 28px; align-items: center; padding: 27px; background: var(--navy); color: white; }
+.skill-match-score { display: grid; justify-items: center; gap: 5px; border-right: 1px solid #35536a; padding-right: 24px; }
+.skill-match-score strong { color: var(--lime); font: 600 3.6rem 'Space Grotesk'; line-height: 1; }
+.skill-match-score span, .roadmap-kicker { color: #9eb1bf; font-size: .66rem; font-weight: 700; letter-spacing: .12em; }
+.skill-match-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.skill-match-heading .eyebrow { color: var(--lime); margin-bottom: 7px; }
+.skill-match-heading h2 { margin: 0; font: 600 1.25rem 'Space Grotesk'; }
+.skill-match-heading > span { color: var(--lime); font-size: .78rem; }
+.skill-match-track { height: 8px; background: #35536a; border-radius: 8px; overflow: hidden; margin: 17px 0 10px; }
+.skill-match-track span { display: block; height: 100%; background: var(--lime); border-radius: inherit; transition: width .3s ease; }
+.skill-match-details > p { color: #bbcad5; font-size: .82rem; margin: 0; }
+.skill-roadmap { margin-top: 42px; }
+.skill-roadmap .section-title h2 { margin-bottom: 0; }
+.skill-roadmap-path { display: grid; gap: 13px; }
+.roadmap-step { display: grid; grid-template-columns: 48px 1fr auto; gap: 17px; align-items: start; background: white; border: 1px solid var(--line); padding: 21px; }
+.roadmap-marker { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: #eef4d1; color: #54701e; font: 600 .9rem 'Space Grotesk'; }
+.roadmap-focus .roadmap-marker { background: #fae9e4; color: var(--coral); }
+.roadmap-action .roadmap-marker { background: var(--navy); color: var(--lime); }
+.roadmap-step-content { min-width: 0; }
+.roadmap-kicker { color: #6c7f29; }
+.roadmap-step-content h3 { margin: 6px 0 10px; font: 600 1.05rem 'Space Grotesk'; }
+.roadmap-step-content p { color: var(--muted); font-size: .83rem; line-height: 1.55; margin: 0 0 10px; }
+.roadmap-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+.roadmap-tags span { display: inline-block; padding: 7px 10px; background: #f1f3ec; color: var(--ink); font-size: .76rem; }
+.roadmap-gap-group + .roadmap-gap-group { margin-top: 13px; }
+.roadmap-gap-group > strong { display: block; margin-bottom: 7px; font-size: .77rem; }
+.roadmap-status { color: #54701e; font-size: .65rem; font-weight: 700; letter-spacing: .1em; padding-top: 7px; white-space: nowrap; }
+.roadmap-status.status-focus { color: var(--coral); }
+.roadmap-action .text-link { display: inline-block; margin-top: 4px; color: var(--coral); font-size: .82rem; font-weight: 700; }
+.learning-path { margin: 14px 0; padding: 14px; background: #f6f7f2; }
+.learning-path > strong { font-size: .78rem; }
+.learning-path ol { display: flex; flex-wrap: wrap; gap: 8px 26px; list-style: none; counter-reset: learning-step; margin: 12px 0 0; padding: 0; }
+.learning-path li { position: relative; counter-increment: learning-step; padding: 7px 10px; background: white; border: 1px solid var(--line); font-size: .76rem; }
+.learning-path li::before { content: counter(learning-step, decimal-leading-zero) " "; color: #6c7f29; font-weight: 700; }
+.learning-path li:not(:last-child)::after { content: "→"; position: absolute; right: -21px; color: var(--coral); font-weight: 700; }
+.roadmap-practice-note { margin-top: 14px !important; }
+@media (max-width: 600px) {
+  .skill-match-summary { grid-template-columns: 1fr; gap: 18px; }
+  .skill-match-score { border-right: 0; border-bottom: 1px solid #35536a; padding: 0 0 17px; }
+  .skill-match-heading { align-items: flex-start; flex-direction: column; }
+  .roadmap-step { grid-template-columns: 42px 1fr; gap: 12px; padding: 16px; }
+  .roadmap-status { grid-column: 2; padding-top: 0; }
+}

@@ -531,18 +531,98 @@ function SkillGaps() {
   const [searchParams] = useSearchParams();
   const [id, setId] = useState(() => searchParams.get('opportunity') || '');
   const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
   const check = async (event) => {
     event.preventDefault();
+    setLoading(true);
     try {
       setResult((await portalApi.skillGap(id)).data);
     } catch {
       setResult({ error: 'Opportunity or student profile not found.' });
+    } finally {
+      setLoading(false);
     }
   };
   return <Page eyebrow="SKILL GAPS" title="Know what to close." description="Compare your current skills with an opportunity's requirements.">
-    <form className="inline-form" onSubmit={check}><input required type="number" min="1" placeholder="Opportunity ID" value={id} onChange={(event) => setId(event.target.value)} /><button className="button primary">Calculate match</button></form>
-    {result && (result.error ? <p className="form-error">{result.error}</p> : <div className="match-card"><strong>{result.matchPercentage}%</strong><div><p>{result.matchedCount} of {result.requiredCount} requirements met</p><p className="muted">Skills to add: {(result.missingSkills || []).join(', ') || 'None'}</p><p className="muted">Skills to improve: {(result.insufficientProficiencySkills || []).join(', ') || 'None'}</p></div></div>)}
+    <form className="inline-form" onSubmit={check}><input required type="number" min="1" placeholder="Opportunity ID" value={id} onChange={(event) => setId(event.target.value)} /><button className="button primary" disabled={loading}>{loading ? 'Checking…' : 'Calculate match'}</button></form>
+    {result && (result.error ? <p className="form-error">{result.error}</p> : <SkillGapRoadmap result={result} />)}
   </Page>;
+}
+
+function learningStepsFor(skill) {
+  if (skill.trim().toLowerCase() === 'spring boot') return ['Spring Boot', 'REST APIs', 'JPA', 'Security'];
+  return [`Learn ${skill} fundamentals`, `Practice ${skill} in a small project`, 'Add the project to your portfolio'];
+}
+
+function SkillGapRoadmap({ result }) {
+  const matchedSkills = result.matchedSkills || [];
+  const missingSkills = result.missingSkills || [];
+  const insufficientSkills = result.insufficientProficiencySkills || [];
+  const hasGaps = missingSkills.length > 0 || insufficientSkills.length > 0;
+
+  return <div className="skill-gap-results">
+    <section className="skill-match-summary" aria-label="Skill match summary">
+      <div className="skill-match-score">
+        <strong>{result.matchPercentage}%</strong>
+        <span>SKILL MATCH</span>
+      </div>
+      <div className="skill-match-details">
+        <div className="skill-match-heading">
+          <div><p className="eyebrow">YOUR MATCH</p><h2>{result.matchedCount} of {result.requiredCount} requirements met</h2></div>
+          <span>{hasGaps ? `${missingSkills.length + insufficientSkills.length} to focus on` : 'All requirements met'}</span>
+        </div>
+        <div className="skill-match-track" role="progressbar" aria-label="Skill match percentage" aria-valuenow={result.matchPercentage} aria-valuemin="0" aria-valuemax="100">
+          <span style={{ width: `${result.matchPercentage}%` }} />
+        </div>
+        <p>{hasGaps ? 'Use the roadmap below to focus your next learning steps.' : 'You meet all the skills required for this opportunity.'}</p>
+      </div>
+    </section>
+
+    <section className="skill-roadmap" aria-labelledby="skill-roadmap-title">
+      <div className="section-title"><h2 id="skill-roadmap-title">Your personalized skill-gap roadmap</h2><span>BASED ON THIS OPPORTUNITY</span></div>
+      <div className="skill-roadmap-path">
+        <article className="roadmap-step roadmap-complete">
+          <span className="roadmap-marker" aria-hidden="true">01</span>
+          <div className="roadmap-step-content">
+            <span className="roadmap-kicker">CURRENT SKILLS</span>
+            <h3>Build on what you already know</h3>
+            {matchedSkills.length
+              ? <div className="roadmap-tags">{matchedSkills.map((skill) => <span key={skill}>{skill}</span>)}</div>
+              : <p>No required skills matched yet. Add your skills in the Skills section to improve your match.</p>}
+          </div>
+          <span className="roadmap-status">MET</span>
+        </article>
+        <article className={`roadmap-step ${hasGaps ? 'roadmap-focus' : 'roadmap-complete'}`}>
+          <span className="roadmap-marker" aria-hidden="true">02</span>
+          <div className="roadmap-step-content">
+            <span className="roadmap-kicker">{hasGaps ? 'SKILL GAPS' : 'REQUIREMENTS'}</span>
+            <h3>{hasGaps ? 'Focus on these requirements next' : 'You are ready for this opportunity'}</h3>
+            {missingSkills.length > 0 && <div className="roadmap-gap-group"><strong>Skills to add</strong><div className="roadmap-tags">{missingSkills.map((skill) => <span key={skill}>{skill}</span>)}</div></div>}
+            {insufficientSkills.length > 0 && <div className="roadmap-gap-group"><strong>Skills to strengthen</strong><div className="roadmap-tags">{insufficientSkills.map((skill) => <span key={skill}>{skill}</span>)}</div></div>}
+            {!hasGaps && <p>Every listed skill meets the required proficiency level.</p>}
+          </div>
+          <span className={`roadmap-status ${hasGaps ? 'status-focus' : ''}`}>{hasGaps ? 'NEXT' : 'MET'}</span>
+        </article>
+        <article className="roadmap-step roadmap-action">
+          <span className="roadmap-marker" aria-hidden="true">03</span>
+          <div className="roadmap-step-content">
+            <span className="roadmap-kicker">RECOMMENDED LEARNING</span>
+            <h3>{hasGaps ? 'Learn, practice, and show your progress' : 'Keep your portfolio current'}</h3>
+            <p>{hasGaps
+              ? 'Follow a suggested path for each missing skill, then practice any skills that need a higher proficiency.'
+              : 'Add relevant projects or certificates to your portfolio to demonstrate your strengths.'}</p>
+            {missingSkills.map((skill) => <div className="learning-path" key={skill}>
+              <strong>Suggested path for {skill}</strong>
+              <ol>{learningStepsFor(skill).map((step) => <li key={step}>{step}</li>)}</ol>
+            </div>)}
+            {insufficientSkills.length > 0 && <p className="roadmap-practice-note"><strong>Practice next:</strong> {insufficientSkills.join(', ')}. Build a focused project and update your demonstrated proficiency.</p>}
+            <Link className="text-link" to="/app/skills">{hasGaps ? 'Update your skills →' : 'Review your skills →'}</Link>
+          </div>
+          <span className="roadmap-status">ACTION</span>
+        </article>
+      </div>
+    </section>
+  </div>;
 }
 
 function Opportunities({ role }) {
