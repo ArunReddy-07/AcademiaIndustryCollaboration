@@ -72,6 +72,12 @@ export const portalApi = {
   ),
   assessments: () => api.get('/assessments/me'),
   submitAssessment: (payload) => api.post('/assessments', payload),
+  generateAssessment: (payload) => api.post('/assessments/generate', payload),
+  assessmentAttempt: (attemptId) => api.get(`/assessments/attempts/${attemptId}`),
+  submitAssessmentAttempt: (attemptId, answers) => api.post(
+    `/assessments/attempts/${attemptId}/submit`,
+    { answers },
+  ),
   skillGap: (opportunityId) => api.get(`/skill-gaps/${opportunityId}`),
   careerSkillGap: (type, listingId) => api.get(`/skill-gaps/${type}/${listingId}`),
   recommendations: () => api.get('/recommendations'),

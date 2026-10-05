@@ -24,6 +24,12 @@ public class GlobalExceptionHandler {
 
         private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+        @ExceptionHandler(GeminiIntegrationException.class)
+        public ResponseEntity<ApiErrorResponse> handleGeminiIntegration(
+                        GeminiIntegrationException exception, HttpServletRequest request) {
+                return buildResponse(exception.getStatus(), exception.getMessage(), request.getRequestURI());
+        }
+
         @ExceptionHandler(InvalidPasswordResetException.class)
         public ResponseEntity<ApiErrorResponse> handleInvalidPasswordReset(
                         InvalidPasswordResetException exception, HttpServletRequest request) {

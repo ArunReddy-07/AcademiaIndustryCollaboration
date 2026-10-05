@@ -488,46 +488,255 @@ function Skills({ role }) { const [skills, setSkills] = useState([]); const [stu
 
 function Assessment() {
   const [items, setItems] = useState([]);
-  const [skills, setSkills] = useState([]);
-  const [studentId, setStudentId] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ skillId: '', score: '' });
-  const [message, setMessage] = useState('');
+  const [attempt, setAttempt] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [form, setForm] = useState({ skill: '', difficulty: 'Medium', numberOfQuestions: '10' });
+  const [generating, setGenerating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingAttempt, setLoadingAttempt] = useState(true);
   const [error, setError] = useState('');
 
-  const refresh = async () => setItems((await portalApi.assessments()).data);
-  useEffect(() => {
-    portalApi.assessments().then((response) => setItems(response.data)).catch(() => setError('Assessments could not be loaded.'));
-    portalApi.skills().then((response) => setSkills(response.data)).catch(() => setError('Skills could not be loaded.'));
-    portalApi.studentProfile().then((response) => setStudentId(response.data.id)).catch(() => setError('Create your student profile before submitting an assessment.'));
-  }, []);
+  let accountEmail = '';
+  try { accountEmail = JSON.parse(localStorage.getItem('portal_session') || '{}').user?.email?.toLowerCase() || ''; } catch { /* Ignore a corrupt local session. */ }
+  const activeAttemptKey = accountEmail ? `portal_active_assessment_${accountEmail}` : '';
 
-  const submit = async (event) => {
+  useEffect(() => {
+    let active = true;
+    portalApi.assessments()
+      .then((response) => { if (active) setItems(response.data); })
+      .catch((requestError) => { if (active) setError(requestError.response?.data?.message || 'Assessment history could not be loaded.'); });
+
+    const savedAttemptId = activeAttemptKey ? localStorage.getItem(activeAttemptKey) : null;
+    if (!savedAttemptId) {
+      setLoadingAttempt(false);
+      return () => { active = false; };
+    }
+    portalApi.assessmentAttempt(savedAttemptId)
+      .then((response) => {
+        if (active) {
+          setAttempt(response.data);
+          setCurrentQuestionIndex(0);
+          const savedAnswersKey = `${activeAttemptKey}_answers_${savedAttemptId}`;
+          if (response.data.submitted) {
+            localStorage.removeItem(savedAnswersKey);
+          } else {
+            try {
+              const savedAnswers = JSON.parse(localStorage.getItem(savedAnswersKey) || '{}');
+              setAnswers(savedAnswers && typeof savedAnswers === 'object' && !Array.isArray(savedAnswers)
+                ? savedAnswers
+                : {});
+            } catch {
+              localStorage.removeItem(savedAnswersKey);
+              setAnswers({});
+            }
+          }
+        }
+      })
+      .catch((requestError) => {
+        if (!active) return;
+        if (requestError.response?.status !== 404) {
+          setError(requestError.response?.data?.message || 'Your active assessment could not be restored.');
+        } else {
+          localStorage.removeItem(activeAttemptKey);
+          localStorage.removeItem(`${activeAttemptKey}_answers_${savedAttemptId}`);
+        }
+      })
+      .finally(() => { if (active) setLoadingAttempt(false); });
+    return () => { active = false; };
+  }, [activeAttemptKey]);
+
+  const generate = async (event) => {
     event.preventDefault();
-    if (saving) return;
+    if (generating || loadingAttempt) return;
     setError('');
-    setMessage('');
-    setSaving(true);
+    setGenerating(true);
+    setAttempt(null);
+    setAnswers({});
+    setCurrentQuestionIndex(0);
     try {
-      await portalApi.submitAssessment({ studentId, skillId: Number(form.skillId), score: Number(form.score) });
-      await refresh();
-      setMessage('Assessment saved. If you already assessed this skill, your score and proficiency level have been updated.');
+      const response = await portalApi.generateAssessment({
+        ...form,
+        skill: form.skill.trim(),
+        numberOfQuestions: Number(form.numberOfQuestions),
+      });
+      setAttempt(response.data);
+      if (activeAttemptKey) {
+        localStorage.setItem(activeAttemptKey, String(response.data.attemptId));
+        localStorage.removeItem(`${activeAttemptKey}_answers_${response.data.attemptId}`);
+      }
     } catch (requestError) {
-      setError(requestError.response?.data?.message || 'Assessment could not be saved.');
+      setError(requestError.response?.data?.message || 'Assessment could not be generated. Please try again.');
     } finally {
-      setSaving(false);
+      setGenerating(false);
     }
   };
 
-  return <Page eyebrow="ASSESSMENT" title="Measure what you know." description="Submit a score to record evidence of your current proficiency.">
-    <form className="card form-grid" onSubmit={submit}>
-      <Field label="Skill"><select required value={form.skillId} onChange={update(setForm, 'skillId')}><option value="">Choose a skill</option>{skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}</select></Field>
-      <Field label="Score (0–100)"><input required type="number" min="0" max="100" value={form.score} onChange={update(setForm, 'score')} /></Field>
-      {error && <p className="form-error">{error}</p>}{message && <p className="success">{message}</p>}
-      <div className="form-actions"><button className="button primary" disabled={!studentId || !skills.length || saving}>{saving ? 'Saving…' : 'Submit or update assessment'}</button></div>
-    </form>
-    <section className="section-block"><div className="section-title"><h2>Assessment history</h2></div><DataList items={items} empty="No assessments submitted yet." fields={['skillId', 'score', 'level', 'assessedAt']} /></section>
+  const chooseAnswer = (questionId, selectedAnswer) => {
+    const updatedAnswers = { ...answers, [questionId]: selectedAnswer };
+    setAnswers(updatedAnswers);
+    if (activeAttemptKey && attempt?.attemptId) {
+      try {
+        localStorage.setItem(
+          `${activeAttemptKey}_answers_${attempt.attemptId}`,
+          JSON.stringify(updatedAnswers),
+        );
+      } catch {
+        setError('Your answer was selected but could not be saved for recovery after a reload.');
+      }
+    }
+  };
+
+  const submitAttempt = async () => {
+    if (!attempt || attempt.submitted || submitting) return;
+    setError('');
+    setSubmitting(true);
+    try {
+      const response = await portalApi.submitAssessmentAttempt(attempt.attemptId, Object.entries(answers)
+        .map(([questionId, selectedAnswer]) => ({ questionId: Number(questionId), selectedAnswer })));
+      setAttempt(response.data);
+      if (activeAttemptKey) {
+        localStorage.removeItem(activeAttemptKey);
+        localStorage.removeItem(`${activeAttemptKey}_answers_${attempt.attemptId}`);
+      }
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Your answers could not be submitted.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const startNewAssessment = () => {
+    if (activeAttemptKey) localStorage.removeItem(activeAttemptKey);
+    setAttempt(null);
+    setAnswers({});
+    setError('');
+  };
+
+  const questions = attempt?.questions || [];
+  const currentQuestion = questions[currentQuestionIndex];
+  const answeredCount = Object.keys(answers).length;
+
+  return <Page eyebrow="ASSESSMENT" title="Measure what you know." description="Choose any technical topic. Your assessment questions are generated for this test and scored securely.">
+    {!attempt && <section className="assessment-config-card">
+      <div className="assessment-config-intro">
+        <span className="resume-section-kicker">AI-GENERATED ASSESSMENT</span>
+        <h2>What would you like to practice?</h2>
+        <p>Enter a skill or topic in your own words. No question bank or manual score entry required.</p>
+      </div>
+      <form className="assessment-config-form" onSubmit={generate}>
+        <Field label="Skill / Topic">
+          <input required maxLength="100" value={form.skill} onChange={update(setForm, 'skill')} placeholder="e.g. Java Collections, Binary Trees, SQL Joins" />
+        </Field>
+        <div className="assessment-config-options">
+          <Field label="Difficulty">
+            <select value={form.difficulty} onChange={update(setForm, 'difficulty')}>
+              {['Easy', 'Medium', 'Hard'].map((difficulty) => <option key={difficulty}>{difficulty}</option>)}
+            </select>
+          </Field>
+          <Field label="Number of questions">
+            <select value={form.numberOfQuestions} onChange={update(setForm, 'numberOfQuestions')}>
+              {['5', '10', '15', '20'].map((count) => <option key={count} value={count}>{count} questions</option>)}
+            </select>
+          </Field>
+        </div>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <button className="button primary" disabled={generating || loadingAttempt || !form.skill.trim()}>
+          {generating ? 'Generating your assessment…' : 'Generate Assessment'}
+        </button>
+      </form>
+      {generating && <p className="assessment-generating" role="status">Generating your assessment. This may take a few moments.</p>}
+      {loadingAttempt && <p className="assessment-generating" role="status">Checking for an in-progress assessment…</p>}
+    </section>}
+
+    {attempt && !attempt.submitted && currentQuestion && <section className="assessment-taking">
+      <div className="assessment-attempt-heading">
+        <div><span className="resume-section-kicker">{attempt.skill} · {attempt.difficulty}</span><h2>Your assessment</h2></div>
+        <span className="assessment-progress-label">Question {currentQuestionIndex + 1} of {questions.length}</span>
+      </div>
+      <div className="assessment-progress-track" role="progressbar" aria-label="Assessment progress" aria-valuenow={currentQuestionIndex + 1} aria-valuemin="0" aria-valuemax={questions.length}>
+        <span style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }} />
+      </div>
+      <article className="assessment-question-card">
+        <div className="assessment-question-meta"><span>QUESTION {String(currentQuestionIndex + 1).padStart(2, '0')}</span><span>{currentQuestion.topic}</span></div>
+        <h3>{currentQuestion.question}</h3>
+        <fieldset className="assessment-options">
+          <legend className="sr-only">Choose one answer</legend>
+          {currentQuestion.options.map((option, index) => (
+            <label className={`assessment-option ${answers[currentQuestion.questionId] === option ? 'selected' : ''}`} key={`${currentQuestion.questionId}-${option}`}>
+              <input
+                type="radio"
+                name={`assessment-question-${currentQuestion.questionId}`}
+                value={option}
+                checked={answers[currentQuestion.questionId] === option}
+                onChange={() => chooseAnswer(currentQuestion.questionId, option)}
+              />
+              <span className="assessment-option-letter">{String.fromCharCode(65 + index)}</span>
+              <span>{option}</span>
+            </label>
+          ))}
+        </fieldset>
+      </article>
+      <div className="assessment-navigation">
+        <span>{answeredCount} of {questions.length} answered</span>
+        <div>
+          <button type="button" className="button" disabled={currentQuestionIndex === 0} onClick={() => setCurrentQuestionIndex((index) => index - 1)}>Previous</button>
+          {currentQuestionIndex < questions.length - 1
+            ? <button type="button" className="button primary" onClick={() => setCurrentQuestionIndex((index) => index + 1)}>Next</button>
+            : <button type="button" className="button primary" disabled={submitting} onClick={submitAttempt}>{submitting ? 'Submitting…' : 'Submit assessment'}</button>}
+        </div>
+      </div>
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </section>}
+
+    {attempt?.submitted && <AssessmentResultView result={attempt} onNewAssessment={startNewAssessment} />}
+
+    <section className="section-block">
+      <div className="section-title"><h2>Recorded skill assessment history</h2><span>EXISTING SCORES</span></div>
+      <DataList items={items} empty="No previous skill assessment scores have been recorded." fields={['skillId', 'score', 'level', 'assessedAt']} />
+    </section>
   </Page>;
+}
+
+function AssessmentResultView({ result, onNewAssessment }) {
+  const performance = result.topicPerformance || [];
+  const strongAreas = result.strongAreas || [];
+  const needsImprovement = result.needsImprovement || [];
+  const skillGaps = result.skillGaps || [];
+  const recommendations = result.recommendations || [];
+  return <section className="assessment-result">
+    <div className="assessment-result-hero">
+      <div className="assessment-result-score"><strong>{result.score}%</strong><span>ASSESSMENT SCORE</span></div>
+      <div><span className="resume-section-kicker">ASSESSMENT COMPLETE</span><h2>{result.skill}</h2><p>{result.difficulty} · {result.correctCount} correct out of {result.numberOfQuestions}</p></div>
+      <button className="button" onClick={onNewAssessment}>New assessment</button>
+    </div>
+    <section className="assessment-result-section">
+      <div className="resume-section-heading"><div><span className="resume-section-kicker">TOPIC PERFORMANCE</span><h2>Performance analysis</h2></div></div>
+      {performance.length ? <div className="assessment-performance-list">{performance.map((item) => (
+        <div className="assessment-performance-item" key={item.topic}>
+          <div><strong>{item.topic}</strong><span>{item.correctCount} / {item.questionCount} correct</span><b>{item.percentage}%</b></div>
+          <div className="resume-progress-track"><span style={{ width: `${item.percentage}%` }} /></div>
+        </div>
+      ))}</div> : <p className="resume-section-empty">No topic-level analysis is available.</p>}
+    </section>
+    <section className="assessment-result-insights">
+      <article className="resume-signal-group resume-signal-positive">
+        <div className="resume-signal-heading"><span aria-hidden="true">✓</span><h3>Strong areas</h3><b>{strongAreas.length}</b></div>
+        {strongAreas.length ? <ul>{strongAreas.map((area) => <li key={area}>{area}</li>)}</ul> : <p>Keep practicing to build strong topic areas.</p>}
+      </article>
+      <article className="resume-signal-group resume-signal-attention">
+        <div className="resume-signal-heading"><span aria-hidden="true">!</span><h3>Needs improvement</h3><b>{needsImprovement.length}</b></div>
+        {needsImprovement.length ? <ul>{needsImprovement.map((area) => <li key={area}>{area}</li>)}</ul> : <p>No weak topic areas were detected.</p>}
+      </article>
+    </section>
+    <section className="assessment-result-section">
+      <div className="resume-section-heading"><div><span className="resume-section-kicker">NEXT STEPS</span><h2>Skill gaps & recommendations</h2></div></div>
+      {skillGaps.length ? <ul className="assessment-recommendations">{skillGaps.map((gap) => <li key={gap}>{gap}</li>)}</ul> : <p className="resume-section-empty">No low-performance skill gaps were detected.</p>}
+      {recommendations.length > 0 && <ul className="assessment-recommendations">{recommendations.map((recommendation) => <li key={recommendation}>{recommendation}</li>)}</ul>}
+      <p className="assessment-recommendation-note">These learning suggestions are based on this attempt. Opportunity recommendations remain available in the Recommendations section.</p>
+    </section>
+    <p className="resume-disclaimer">Your score is calculated by the backend from the answers submitted. Correct answers are not included in the student response.</p>
+  </section>;
 }
 function SkillGaps() {
   const [searchParams] = useSearchParams();

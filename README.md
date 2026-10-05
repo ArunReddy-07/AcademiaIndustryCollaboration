@@ -33,6 +33,24 @@ The development profile can create the first Admin account only when `BOOTSTRAP_
 
 The Vite dev server uses the backend at `http://localhost:8081` by default; configure another target in `frontend/vite.config.js` only if your backend runs on a different port. This avoids the local Oracle listener on port 8080.
 
+### Gemini connection test
+
+The Gemini diagnostic and student AI assessments use the existing Spring `RestClient` and read the key from `GEMINI_API_KEY`. Set that variable in the backend process environment (or in the backend Render service's secret environment settings); never put it in React/Vite variables or source control. In Docker Compose, add it to the local `.env` file. The diagnostic endpoint is JWT-authenticated and restricted to Admin accounts because each call uses Gemini API quota:
+
+`GET /api/ai/test`
+
+Send the request with an Admin access token in `Authorization: Bearer <access-token>`. A successful response contains the generated Java Collections multiple-choice question. Missing keys, rejected credentials, timeouts, upstream errors, and malformed responses return sanitized error messages without the API key.
+
+### AI-generated assessments
+
+Students can generate, resume, and submit AI-generated assessments through these endpoints:
+
+- `POST /api/assessments/generate` with `{"skill":"Java Collections","difficulty":"Medium","numberOfQuestions":5}` (allowed question counts: 5, 10, 15, or 20).
+- `GET /api/assessments/attempts/{attemptId}` to retrieve the student's own attempt.
+- `POST /api/assessments/attempts/{attemptId}/submit` with `{"answers":[{"questionId":1,"selectedAnswer":"..."}]}`.
+
+All assessment endpoints require a Student access token. The answer key remains backend-only; scores and topic-level feedback are calculated and persisted on the backend. The existing manual assessment history endpoints remain available.
+
 ### Password recovery email
 
 The login page supports email verification codes for password recovery. Configure the backend's `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, and `MAIL_FROM` environment variables with an SMTP account before using this feature. SMTP authentication and STARTTLS default to enabled and can be controlled with `MAIL_SMTP_AUTH` and `MAIL_SMTP_STARTTLS`. For Gmail, use an app password rather than your regular account password. Keep SMTP credentials in environment/secret settings, never in source control. Recovery codes expire after 10 minutes, can be resent after 60 seconds, and allow at most five verification attempts.
