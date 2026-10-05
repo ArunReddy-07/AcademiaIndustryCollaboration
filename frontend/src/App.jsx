@@ -554,6 +554,7 @@ function SkillGaps() {
 function ResumeAnalyzerPage() {
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
+  const [loadingResult, setLoadingResult] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -563,8 +564,16 @@ function ResumeAnalyzerPage() {
       .then((response) => {
         if (active) setResult(response.data);
       })
-      .catch(() => {
-        if (active) setResult(null);
+      .catch((requestError) => {
+        if (active) {
+          setResult(null);
+          if (requestError.response?.status !== 404) {
+            setError(requestError.response?.data?.message || 'Your latest analysis could not be loaded. Please try again.');
+          }
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingResult(false);
       });
     return () => { active = false; };
   }, []);
@@ -593,6 +602,24 @@ function ResumeAnalyzerPage() {
     }
   };
 
+  const selectResume = (event) => {
+    const selectedFile = event.target.files?.[0] || null;
+    setError('');
+    if (selectedFile && !selectedFile.name.toLowerCase().endsWith('.pdf')) {
+      setFile(null);
+      setError('Choose a PDF file to continue.');
+      event.target.value = '';
+      return;
+    }
+    if (selectedFile && selectedFile.size > 5 * 1024 * 1024) {
+      setFile(null);
+      setError('Resume file must be 5 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+    setFile(selectedFile);
+  };
+
   const categoryBreakdown = result?.categoryBreakdown || [];
   const skillGapSkills = result?.skillGapSkills || [];
   const missingSections = result?.missingSections || [];
@@ -601,79 +628,120 @@ function ResumeAnalyzerPage() {
   const extractedSkills = result?.extractedSkills || [];
 
   return <Page eyebrow="RESUME ANALYZER" title="Turn your resume into a clearer story." description="Upload a PDF and review how your document reads against key student-ready signals.">
-    <section className="card">
-      <form className="inline-form" onSubmit={analyze}>
-        <input type="file" accept=".pdf,application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
-        <button className="button primary" disabled={!file || loading}>{loading ? 'Analyzing…' : 'Analyze PDF'}</button>
+    <section className="resume-upload-card">
+      <div className="resume-upload-copy">
+        <span className="resume-section-kicker">PRIVATE BY DEFAULT</span>
+        <h2>Start with your latest resume</h2>
+        <p>Your PDF is analyzed for resume signals. We keep the analysis and extracted text, not a downloadable copy of the original file.</p>
+      </div>
+      <form className="resume-upload-form" onSubmit={analyze}>
+        <label className="resume-file-picker">
+          <span className="resume-file-icon" aria-hidden="true">↑</span>
+          <span className="resume-file-copy">
+            <strong>{file?.name || 'Choose a PDF to analyze'}</strong>
+            <small>{file ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : 'PDF format · up to 5 MB'}</small>
+          </span>
+          <input type="file" accept=".pdf,application/pdf" onChange={selectResume} />
+        </label>
+        <button className="button primary" disabled={!file || loading}>{loading ? 'Analyzing resume…' : 'Analyze resume'}</button>
       </form>
-      {error && <p className="form-error">{error}</p>}
-      <p className="muted">Accepted format: PDF only. Maximum size: 5 MB.</p>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <p className="resume-upload-note">For your privacy, only your authenticated account can access its analysis.</p>
     </section>
 
-    {!result ? <Empty text="No resume analysis has been generated yet. Upload a PDF to review your score and gaps." /> : (
-      <div className="resume-analysis-results" style={{ display: 'grid', gap: '1.5rem' }}>
-        <section className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-          <div className="metric">
-            <span>Overall score</span>
-            <strong>{result.overallScore ?? 0}</strong>
-            <small>Weighted review</small>
+    {loadingResult ? <div className="resume-loading" role="status">Loading your latest resume analysis…</div> : !result ? (
+      <section className="resume-empty-state">
+        <span className="resume-empty-icon" aria-hidden="true">✳</span>
+        <h2>Your resume insights will appear here</h2>
+        <p>Upload a PDF to get a structured score, section checklist, and skill review.</p>
+      </section>
+    ) : (
+      <div className="resume-analysis-results">
+        <section className="resume-score-overview" aria-label="Resume score overview">
+          <div className="resume-score-card">
+            <div className="resume-score-ring" style={{ '--resume-score': `${result.overallScore ?? 0}%` }}>
+              <div><strong>{result.overallScore ?? 0}</strong><span>OUT OF 100</span></div>
+            </div>
+            <div className="resume-score-copy">
+              <span className="resume-section-kicker">YOUR RESUME SNAPSHOT</span>
+              <h2>Overall score</h2>
+              <p>{result.summary || 'Your resume has been evaluated against a structured checklist.'}</p>
+            </div>
           </div>
-          <div className="metric">
-            <span>Profile completeness</span>
-            <strong>{result.profileCompleteness ?? 0}%</strong>
-            <small>Section coverage</small>
-          </div>
-          <div className="metric">
-            <span>Uploaded file</span>
-            <strong>{result.fileName || 'Latest resume'}</strong>
-            <small>{result.uploadedAt ? new Date(result.uploadedAt).toLocaleDateString() : 'Recent upload'}</small>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="section-title"><h2>Overall summary</h2><span>AI-FREE REVIEW</span></div>
-          <p>{result.summary || 'Your resume has been evaluated against a structured checklist.'}</p>
-        </section>
-
-        <section className="split-layout">
-          <div className="card">
-            <div className="section-title"><h2>Category breakdown</h2><span>{categoryBreakdown.length} METRICS</span></div>
-            {categoryBreakdown.length ? <div className="tag-list">{categoryBreakdown.map((item) => (
-              <div key={item.name} className="roadmap-step roadmap-complete" style={{ padding: '0.75rem 1rem' }}>
-                <div className="roadmap-step-content">
-                  <span className="roadmap-kicker">{item.name}</span>
-                  <h3>{item.score ?? 0}/100</h3>
-                  <p>{item.description}</p>
-                </div>
-                <span className="roadmap-status">{item.weight ?? 0}%</span>
+          <div className="resume-meta-card">
+            <div className="resume-completeness">
+              <div><span>Profile completeness</span><strong>{result.profileCompleteness ?? 0}%</strong></div>
+              <div className="resume-progress-track" role="progressbar" aria-label="Profile completeness" aria-valuenow={result.profileCompleteness ?? 0} aria-valuemin="0" aria-valuemax="100">
+                <span style={{ width: `${result.profileCompleteness ?? 0}%` }} />
               </div>
-            ))}</div> : <Empty text="No category breakdown available yet." />}
-          </div>
-
-          <div className="card">
-            <div className="section-title"><h2>Resume signals</h2><span>CHECKLIST</span></div>
-            <div className="tag-list">
-              {missingSections.length ? <div><strong>Missing sections</strong>{missingSections.map((section) => <span className="tag" key={section}>{section}</span>)}</div> : <p className="muted">No missing sections detected.</p>}
-              {weakSignals.length ? <div><strong>Weak content signals</strong>{weakSignals.map((signal) => <span className="tag" key={signal}>{signal}</span>)}</div> : <p className="muted">No major weak-content signals triggered.</p>}
-              {strengths.length ? <div><strong>Strengths</strong>{strengths.map((strength) => <span className="tag" key={strength}>{strength}</span>)}</div> : <p className="muted">No strong signals extracted yet.</p>}
+              <small>Based on the resume sections detected</small>
+            </div>
+            <div className="resume-file-meta">
+              <span className="resume-section-kicker">LATEST ANALYSIS</span>
+              <strong title={result.fileName || 'Latest resume'}>{result.fileName || 'Latest resume'}</strong>
+              <small>{result.uploadedAt ? new Date(result.uploadedAt).toLocaleDateString() : 'Recent upload'}</small>
             </div>
           </div>
         </section>
 
-        <section className="split-layout">
-          <div className="card">
-            <div className="section-title"><h2>Extracted skills</h2><span>{extractedSkills.length} FOUND</span></div>
-            {extractedSkills.length ? <div className="tag-list">{extractedSkills.map((skill) => <span className="tag" key={skill}>{skill}</span>)}</div> : <Empty text="No skills were strongly detected in this resume." />}
+        <section className="resume-section-card">
+          <div className="resume-section-heading">
+            <div><span className="resume-section-kicker">SCORE DETAILS</span><h2>Category breakdown</h2></div>
+            <span className="resume-section-count">{categoryBreakdown.length} CATEGORIES</span>
           </div>
+          {categoryBreakdown.length ? <div className="resume-category-list">{categoryBreakdown.map((item) => (
+            <article className="resume-category" key={item.name}>
+              <div className="resume-category-heading">
+                <div><h3>{item.name}</h3><p>{item.description}</p></div>
+                <strong>{item.score ?? 0}<span>/100</span></strong>
+              </div>
+              <div className="resume-progress-track" role="progressbar" aria-label={`${item.name} score`} aria-valuenow={item.score ?? 0} aria-valuemin="0" aria-valuemax="100">
+                <span style={{ width: `${item.score ?? 0}%` }} />
+              </div>
+              <small className="resume-category-weight">Contributes {item.weight ?? 0}% to your overall score</small>
+            </article>
+          ))}</div> : <p className="resume-section-empty">Category scores are not available for this analysis.</p>}
+        </section>
 
-          <div className="card">
-            <div className="section-title"><h2>Skill gaps to address</h2><span>{skillGapSkills.length} TARGETS</span></div>
-            {skillGapSkills.length ? <div className="tag-list">{skillGapSkills.map((skill) => <span className="tag" key={skill}>{skill}</span>)}</div> : <p className="muted">No major gaps against your current recorded skills were detected.</p>}
+        <section className="resume-section-card">
+          <div className="resume-section-heading">
+            <div><span className="resume-section-kicker">WHAT WE FOUND</span><h2>Resume signals</h2></div>
+            <span className="resume-section-count">REVIEW CHECKLIST</span>
+          </div>
+          <div className="resume-signals-grid">
+            <ResumeSignalGroup title="Missing sections" items={missingSections} empty="No missing sections detected." variant="attention" />
+            <ResumeSignalGroup title="Content to strengthen" items={weakSignals} empty="No weak-content signals were detected." variant="attention" />
+            <ResumeSignalGroup title="Strengths" items={strengths} empty="No strong signals were detected yet." variant="positive" />
           </div>
         </section>
+
+        <section className="resume-skills-grid">
+          <article className="resume-section-card">
+            <div className="resume-section-heading">
+              <div><span className="resume-section-kicker">SKILLS IN YOUR RESUME</span><h2>Extracted skills</h2></div>
+              <span className="resume-section-count">{extractedSkills.length} FOUND</span>
+            </div>
+            {extractedSkills.length ? <div className="resume-skill-tags">{extractedSkills.map((skill) => <span className="resume-skill-tag" key={skill}>{skill}</span>)}</div> : <p className="resume-section-empty">No skills were strongly detected in this resume.</p>}
+          </article>
+          <article className="resume-section-card">
+            <div className="resume-section-heading">
+              <div><span className="resume-section-kicker">PROFILE COMPARISON</span><h2>Skill gaps to address</h2></div>
+              <span className="resume-section-count">{skillGapSkills.length} TARGETS</span>
+            </div>
+            {skillGapSkills.length ? <div className="resume-skill-tags resume-skill-tags-gap">{skillGapSkills.map((skill) => <span className="resume-skill-tag" key={skill}>{skill}</span>)}</div> : <p className="resume-section-empty">No gaps against your currently recorded skills were detected.</p>}
+          </article>
+        </section>
+        <p className="resume-disclaimer">This is a rule-based review to help guide improvements, not a hiring decision or a guarantee of outcomes.</p>
       </div>
     )}
   </Page>;
+}
+
+function ResumeSignalGroup({ title, items, empty, variant }) {
+  return <article className={`resume-signal-group resume-signal-${variant}`}>
+    <div className="resume-signal-heading"><span aria-hidden="true">{variant === 'positive' ? '✓' : '!'}</span><h3>{title}</h3><b>{items.length}</b></div>
+    {items.length ? <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul> : <p>{empty}</p>}
+  </article>;
 }
 
 function learningStepsFor(skill) {
