@@ -7,6 +7,7 @@ const roleMenus = {
   STUDENT: [
     ['Overview', '/app'], ['Profile', '/app/profile'], ['Skills', '/app/skills'],
     ['Assessment', '/app/assessment'], ['Skill gaps', '/app/skill-gaps'],
+    ['Resume Analyzer', '/app/resume-analyzer'],
     ['Certifications', '/app/certifications'], ['Projects', '/app/projects'], ['Interests', '/app/interests'],
     ['Recommendations', '/app/recommendations'], ['Opportunities', '/app/opportunities'], ['Applications', '/app/applications'],
     ['Internships', '/app/internships'], ['Jobs', '/app/jobs'],
@@ -38,6 +39,7 @@ function canAccessAppPath(role, pathname) {
     ['/institution-profile', ['INSTITUTION']],
     ['/assessment', ['STUDENT']],
     ['/skill-gaps', ['STUDENT']],
+    ['/resume-analyzer', ['STUDENT']],
     ['/certifications', ['STUDENT']],
     ['/projects', ['STUDENT']],
     ['/interests', ['STUDENT']],
@@ -160,7 +162,7 @@ function AppShell({ auth }) {
   if (role === 'FACULTY' && !session?.user?.facultyInstitutionId) {
     return <FacultyInstitutionSetup session={session} onComplete={auth.save} logout={logout} />;
   }
-  return <div className="app-frame"><aside className="sidebar"><Link className="brand sidebar-brand" to="/app">CAMPUS<span>×</span>WORK</Link><div className="workspace-label">WORKSPACE <b>{role}</b></div><nav className="side-nav">{menus.map(([label, path]) => <NavLink key={path} end={path === '/app'} to={path}>{label}</NavLink>)}</nav><div className="sidebar-bottom"><div className="user-chip"><div className="avatar">{(session?.user?.name || 'U').slice(0, 1).toUpperCase()}</div><div><strong>{session?.user?.name || session?.user?.email}</strong><small>{session?.user?.email}</small></div></div><button className="logout" onClick={logout}>Sign out</button></div></aside><main className="app-main"><header className="mobile-header"><Link className="brand" to="/app">CAMPUS<span>×</span>WORK</Link><button className="logout" onClick={logout}>Sign out</button></header><Routes><Route index element={<Overview role={role} />} /><Route path="profile" element={<Profile />} /><Route path="student-profile" element={<StudentProfilePage />} /><Route path="skills" element={role === 'ADMIN' ? <AdminSkills /> : <Skills role={role} />} /><Route path="assessment" element={<Assessment />} /><Route path="skill-gaps" element={<SkillGaps />} /><Route path="certifications" element={<PortfolioPage type="CERTIFICATION" />} /><Route path="projects" element={<PortfolioPage type="PROJECT" />} /><Route path="interests" element={<PortfolioPage type="INTEREST" />} /><Route path="recommendations" element={<UnavailablePage title="Recommendations" />} /><Route path="opportunities" element={<Opportunities role={role} />} /><Route path="opportunities/new" element={<OpportunityForm />} /><Route path="opportunities/:id" element={<OpportunityDetails />} /><Route path="applications" element={<Applications role={role} />} /><Route path="applicants" element={<Applicants />} /><Route path="collaborations" element={<Collaborations />} /><Route path="placement" element={<Placements />} /><Route path="users" element={<AdminUsers />} /><Route path="students" element={role === 'FACULTY' ? <FacultyStudents /> : <Students />} /><Route path="internships" element={<CareerListings kind="internship" />} /><Route path="jobs" element={<CareerListings kind="job" />} /><Route path="*" element={<Overview role={role} />} /></Routes></main></div>;
+  return <div className="app-frame"><aside className="sidebar"><Link className="brand sidebar-brand" to="/app">CAMPUS<span>×</span>WORK</Link><div className="workspace-label">WORKSPACE <b>{role}</b></div><nav className="side-nav">{menus.map(([label, path]) => <NavLink key={path} end={path === '/app'} to={path}>{label}</NavLink>)}</nav><div className="sidebar-bottom"><div className="user-chip"><div className="avatar">{(session?.user?.name || 'U').slice(0, 1).toUpperCase()}</div><div><strong>{session?.user?.name || session?.user?.email}</strong><small>{session?.user?.email}</small></div></div><button className="logout" onClick={logout}>Sign out</button></div></aside><main className="app-main"><header className="mobile-header"><Link className="brand" to="/app">CAMPUS<span>×</span>WORK</Link><button className="logout" onClick={logout}>Sign out</button></header><Routes><Route index element={<Overview role={role} />} /><Route path="profile" element={<Profile />} /><Route path="student-profile" element={<StudentProfilePage />} /><Route path="skills" element={role === 'ADMIN' ? <AdminSkills /> : <Skills role={role} />} /><Route path="assessment" element={<Assessment />} /><Route path="skill-gaps" element={<SkillGaps />} /><Route path="resume-analyzer" element={<ResumeAnalyzerPage />} /><Route path="certifications" element={<PortfolioPage type="CERTIFICATION" />} /><Route path="projects" element={<PortfolioPage type="PROJECT" />} /><Route path="interests" element={<PortfolioPage type="INTEREST" />} /><Route path="recommendations" element={<UnavailablePage title="Recommendations" />} /><Route path="opportunities" element={<Opportunities role={role} />} /><Route path="opportunities/new" element={<OpportunityForm />} /><Route path="opportunities/:id" element={<OpportunityDetails />} /><Route path="applications" element={<Applications role={role} />} /><Route path="applicants" element={<Applicants />} /><Route path="collaborations" element={<Collaborations />} /><Route path="placement" element={<Placements />} /><Route path="users" element={<AdminUsers />} /><Route path="students" element={role === 'FACULTY' ? <FacultyStudents /> : <Students />} /><Route path="internships" element={<CareerListings kind="internship" />} /><Route path="jobs" element={<CareerListings kind="job" />} /><Route path="*" element={<Overview role={role} />} /></Routes></main></div>;
 }
 
 function Page({ eyebrow, title, description, actions, children }) { return <div className="page"><div className="page-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1>{description && <p className="lead compact">{description}</p>}</div>{actions}</div>{children}</div>; }
@@ -546,6 +548,131 @@ function SkillGaps() {
   return <Page eyebrow="SKILL GAPS" title="Know what to close." description="Compare your current skills with an opportunity's requirements.">
     <form className="inline-form" onSubmit={check}><input required type="number" min="1" placeholder="Opportunity ID" value={id} onChange={(event) => setId(event.target.value)} /><button className="button primary" disabled={loading}>{loading ? 'Checking…' : 'Calculate match'}</button></form>
     {result && (result.error ? <p className="form-error">{result.error}</p> : <SkillGapRoadmap result={result} />)}
+  </Page>;
+}
+
+function ResumeAnalyzerPage() {
+  const [file, setFile] = useState(null);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    portalApi.resumeAnalysis()
+      .then((response) => {
+        if (active) setResult(response.data);
+      })
+      .catch(() => {
+        if (active) setResult(null);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const analyze = async (event) => {
+    event.preventDefault();
+    if (!file) {
+      setError('Choose a PDF resume before analyzing it.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await portalApi.uploadResumeAnalysis(formData);
+      setResult(response.data);
+      setFile(null);
+      event.target.reset();
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'The resume could not be analyzed. Please try another PDF.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const categoryBreakdown = result?.categoryBreakdown || [];
+  const skillGapSkills = result?.skillGapSkills || [];
+  const missingSections = result?.missingSections || [];
+  const weakSignals = result?.weakContentSignals || [];
+  const strengths = result?.strengths || [];
+  const extractedSkills = result?.extractedSkills || [];
+
+  return <Page eyebrow="RESUME ANALYZER" title="Turn your resume into a clearer story." description="Upload a PDF and review how your document reads against key student-ready signals.">
+    <section className="card">
+      <form className="inline-form" onSubmit={analyze}>
+        <input type="file" accept=".pdf,application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+        <button className="button primary" disabled={!file || loading}>{loading ? 'Analyzing…' : 'Analyze PDF'}</button>
+      </form>
+      {error && <p className="form-error">{error}</p>}
+      <p className="muted">Accepted format: PDF only. Maximum size: 5 MB.</p>
+    </section>
+
+    {!result ? <Empty text="No resume analysis has been generated yet. Upload a PDF to review your score and gaps." /> : (
+      <div className="resume-analysis-results" style={{ display: 'grid', gap: '1.5rem' }}>
+        <section className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+          <div className="metric">
+            <span>Overall score</span>
+            <strong>{result.overallScore ?? 0}</strong>
+            <small>Weighted review</small>
+          </div>
+          <div className="metric">
+            <span>Profile completeness</span>
+            <strong>{result.profileCompleteness ?? 0}%</strong>
+            <small>Section coverage</small>
+          </div>
+          <div className="metric">
+            <span>Uploaded file</span>
+            <strong>{result.fileName || 'Latest resume'}</strong>
+            <small>{result.uploadedAt ? new Date(result.uploadedAt).toLocaleDateString() : 'Recent upload'}</small>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="section-title"><h2>Overall summary</h2><span>AI-FREE REVIEW</span></div>
+          <p>{result.summary || 'Your resume has been evaluated against a structured checklist.'}</p>
+        </section>
+
+        <section className="split-layout">
+          <div className="card">
+            <div className="section-title"><h2>Category breakdown</h2><span>{categoryBreakdown.length} METRICS</span></div>
+            {categoryBreakdown.length ? <div className="tag-list">{categoryBreakdown.map((item) => (
+              <div key={item.name} className="roadmap-step roadmap-complete" style={{ padding: '0.75rem 1rem' }}>
+                <div className="roadmap-step-content">
+                  <span className="roadmap-kicker">{item.name}</span>
+                  <h3>{item.score ?? 0}/100</h3>
+                  <p>{item.description}</p>
+                </div>
+                <span className="roadmap-status">{item.weight ?? 0}%</span>
+              </div>
+            ))}</div> : <Empty text="No category breakdown available yet." />}
+          </div>
+
+          <div className="card">
+            <div className="section-title"><h2>Resume signals</h2><span>CHECKLIST</span></div>
+            <div className="tag-list">
+              {missingSections.length ? <div><strong>Missing sections</strong>{missingSections.map((section) => <span className="tag" key={section}>{section}</span>)}</div> : <p className="muted">No missing sections detected.</p>}
+              {weakSignals.length ? <div><strong>Weak content signals</strong>{weakSignals.map((signal) => <span className="tag" key={signal}>{signal}</span>)}</div> : <p className="muted">No major weak-content signals triggered.</p>}
+              {strengths.length ? <div><strong>Strengths</strong>{strengths.map((strength) => <span className="tag" key={strength}>{strength}</span>)}</div> : <p className="muted">No strong signals extracted yet.</p>}
+            </div>
+          </div>
+        </section>
+
+        <section className="split-layout">
+          <div className="card">
+            <div className="section-title"><h2>Extracted skills</h2><span>{extractedSkills.length} FOUND</span></div>
+            {extractedSkills.length ? <div className="tag-list">{extractedSkills.map((skill) => <span className="tag" key={skill}>{skill}</span>)}</div> : <Empty text="No skills were strongly detected in this resume." />}
+          </div>
+
+          <div className="card">
+            <div className="section-title"><h2>Skill gaps to address</h2><span>{skillGapSkills.length} TARGETS</span></div>
+            {skillGapSkills.length ? <div className="tag-list">{skillGapSkills.map((skill) => <span className="tag" key={skill}>{skill}</span>)}</div> : <p className="muted">No major gaps against your current recorded skills were detected.</p>}
+          </div>
+        </section>
+      </div>
+    )}
   </Page>;
 }
 

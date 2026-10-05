@@ -75,6 +75,10 @@ export const portalApi = {
   skillGap: (opportunityId) => api.get(`/skill-gaps/${opportunityId}`),
   careerSkillGap: (type, listingId) => api.get(`/skill-gaps/${type}/${listingId}`),
   recommendations: () => api.get('/recommendations'),
+  resumeAnalysis: () => api.get('/resume-analysis/me'),
+  uploadResumeAnalysis: (formData) => api.post('/resume-analysis/me/analyze', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
   collaborations: () => api.get('/collaborations'),
   placements: () => api.get('/placements/me'),
   industryPlacements: () => api.get('/placements/industry'),
