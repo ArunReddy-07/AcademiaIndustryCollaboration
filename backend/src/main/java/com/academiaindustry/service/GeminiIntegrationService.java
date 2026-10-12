@@ -20,16 +20,28 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @Service
 public class GeminiIntegrationService {
 
     private static final Logger logger = LoggerFactory.getLogger(GeminiIntegrationService.class);
+    private static final Pattern API_KEY_PATTERN = Pattern.compile("AIza[0-9A-Za-z_-]{20,}");
+    private static final Pattern SECRET_ASSIGNMENT_PATTERN = Pattern.compile(
+            "(?i)([\"']?\\b(?:authorization|proxy-authorization|x-goog-api-key|api[_-]?key|key|"
+                    + "access[_-]?token|refresh[_-]?token|token|credential|private[_-]?key|"
+                    + "session[_-]?id|client[_-]?secret|password|secret)\\b[\"']?\\s*[:=]\\s*)"
+                    + "(?:bearer\\s+|basic\\s+|token\\s+)?(?:\"[^\"]*\"|'[^']*'|[^\\s,;]+)");
+    private static final Pattern BEARER_TOKEN_PATTERN = Pattern.compile(
+            "(?i)\\bBearer\\s+[A-Za-z0-9._~+/-]+=*");
+    private static final Pattern JWT_PATTERN = Pattern.compile(
+            "\\beyJ[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}\\b");
+    private static final Pattern URL_CREDENTIAL_PATTERN = Pattern.compile(
+            "(?i)(https?://)[^/@\\s]+:[^/@\\s]+@");
+    private static final int MAX_ERROR_BODY_LENGTH = 16_384;
     private static final String PROMPT = "Generate one multiple-choice question about Java Collections. "
             + "Provide four options and identify the correct answer.";
 
@@ -77,9 +89,11 @@ public class GeminiIntegrationService {
 
     private String generateContent(String prompt, boolean jsonResponse) {
         if (apiKey == null || apiKey.isBlank()) {
+            logger.warn("Gemini API key configured: no; model={}.", safeDiagnostic(model));
             throw new GeminiIntegrationException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Gemini is not configured. Set GEMINI_API_KEY in the backend environment.");
         }
+        logger.info("Gemini API key configured: yes (value omitted); model={}.", safeDiagnostic(model));
 
         Map<String, Object> requestBody = new LinkedHashMap<>();
         requestBody.put("contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))));
@@ -98,15 +112,15 @@ public class GeminiIntegrationService {
                     .body(String.class);
         } catch (ResourceAccessException exception) {
             if (isTimeout(exception)) {
-                logger.warn("Gemini request timed out.");
+                logger.warn("Gemini request timed out (model={}).", safeDiagnostic(model));
                 throw new GeminiIntegrationException(HttpStatus.GATEWAY_TIMEOUT,
                         "Gemini did not respond before the configured timeout.");
             }
-            logger.warn("Gemini request could not reach the upstream API.");
+            logger.warn("Gemini request could not reach the upstream API (model={}).", safeDiagnostic(model));
             throw new GeminiIntegrationException(HttpStatus.BAD_GATEWAY,
                     "Gemini could not be reached. Check the backend network configuration.");
         } catch (RestClientException exception) {
-            logger.warn("Gemini response could not be received.");
+            logger.warn("Gemini response could not be received (model={}).", safeDiagnostic(model));
             throw new GeminiIntegrationException(HttpStatus.BAD_GATEWAY,
                     "Gemini API request failed. Please try again later.");
         }
@@ -123,28 +137,65 @@ public class GeminiIntegrationService {
 
     private void throwUpstreamError(ClientHttpResponse response) throws IOException {
         int status = response.getStatusCode().value();
-        if (status == HttpStatus.UNAUTHORIZED.value()
-                || status == HttpStatus.FORBIDDEN.value()
-                || isInvalidApiKeyResponse(response, status)) {
-            logger.warn("Gemini rejected the configured API credentials (HTTP {}).", response.getStatusCode().value());
-            throw new GeminiIntegrationException(HttpStatus.BAD_GATEWAY,
-                    "Gemini rejected the API key. Verify GEMINI_API_KEY and its API access.");
-        }
+        byte[] body = response.getBody().readNBytes(MAX_ERROR_BODY_LENGTH);
+        UpstreamError upstreamError = parseUpstreamError(body);
+        logger.warn("Gemini upstream failure: httpStatus={}, geminiCode={}, geminiStatus={}, "
+                        + "reason={}, message={}",
+                status,
+                upstreamError.code() == null ? "unknown" : upstreamError.code(),
+                safeDiagnostic(upstreamError.status()),
+                safeDiagnostic(upstreamError.reason()),
+                safeDiagnostic(upstreamError.message()));
 
-        logger.warn("Gemini API returned HTTP {}.", response.getStatusCode().value());
         throw new GeminiIntegrationException(HttpStatus.BAD_GATEWAY,
                 "Gemini API returned an error. Check the API quota and model configuration.");
     }
 
-    private boolean isInvalidApiKeyResponse(ClientHttpResponse response, int status) throws IOException {
-        if (status != HttpStatus.BAD_REQUEST.value()) {
-            return false;
+    private UpstreamError parseUpstreamError(byte[] body) {
+        try {
+            JsonNode error = objectMapper.readTree(body).path("error");
+            JsonNode codeNode = error.path("code");
+            Integer code = codeNode.canConvertToInt() ? codeNode.intValue() : null;
+            String status = text(error.path("status"));
+            String message = text(error.path("message"));
+            String reason = "";
+            JsonNode details = error.path("details");
+            if (details.isArray()) {
+                for (JsonNode detail : details) {
+                    String candidate = text(detail.path("reason"));
+                    if (candidate.isBlank()) {
+                        candidate = text(detail.path("metadata").path("reason"));
+                    }
+                    if (!candidate.isBlank()) {
+                        reason = candidate;
+                        break;
+                    }
+                }
+            }
+            return new UpstreamError(code, status, reason, message);
+        } catch (IOException | IllegalArgumentException exception) {
+            return new UpstreamError(null, "", "", "");
         }
-        String errorBody = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8)
-                .toLowerCase(Locale.ROOT);
-        return errorBody.contains("api_key_invalid")
-                || errorBody.contains("api key not valid")
-                || errorBody.contains("api key is invalid");
+    }
+
+    private String text(JsonNode value) {
+        return value != null && value.isTextual() ? value.asText() : "";
+    }
+
+    private String safeDiagnostic(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String safeValue = value.replaceAll("[\\r\\n\\t\\p{Cntrl}]", " ");
+        if (apiKey != null && !apiKey.isBlank()) {
+            safeValue = safeValue.replace(apiKey, "[REDACTED]");
+        }
+        safeValue = API_KEY_PATTERN.matcher(safeValue).replaceAll("[REDACTED]");
+        safeValue = SECRET_ASSIGNMENT_PATTERN.matcher(safeValue).replaceAll("$1[REDACTED]");
+        safeValue = BEARER_TOKEN_PATTERN.matcher(safeValue).replaceAll("Bearer [REDACTED]");
+        safeValue = JWT_PATTERN.matcher(safeValue).replaceAll("[REDACTED]");
+        safeValue = URL_CREDENTIAL_PATTERN.matcher(safeValue).replaceAll("$1[REDACTED]@");
+        return safeValue.length() > 500 ? safeValue.substring(0, 500) : safeValue;
     }
 
     private String extractGeneratedText(JsonNode response) {
@@ -185,6 +236,9 @@ public class GeminiIntegrationService {
             }
         }
         return false;
+    }
+
+    private record UpstreamError(Integer code, String status, String reason, String message) {
     }
 
     private GeminiIntegrationException malformedResponse() {
